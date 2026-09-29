@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Bus, Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
 import { User } from '../../types';
-import { getStoredUsers, setCurrentUser } from '../../services/storage';
+import { signIn, getCurrentUser } from '../../services/authService';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;
@@ -15,39 +15,42 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail || !password) {
       setError('Please enter both your email address and password.');
+      setIsLoading(false);
       return;
     }
 
-    const users = getStoredUsers();
-    const found = users.find((u) => u.email.toLowerCase() === trimmedEmail);
+    try {
+      // 1. Sign in with Supabase
+      await signIn(trimmedEmail, password);
 
-    if (!found) {
-      setError('No account registered with this email. Check credentials or register.');
-      return;
+      // 2. Get the full user profile (including role)
+      const user = await getCurrentUser();
+
+      if (!user) {
+        throw new Error('Could not retrieve user profile.');
+      }
+
+      onLoginSuccess(user);
+    } catch (err: any) {
+      // Supabase returns specific error messages for unverified emails
+      if (err.message?.includes('Email not confirmed')) {
+        setError('Please verify your email address by clicking the link sent to your inbox.');
+      } else {
+        setError(err.message || 'Invalid email or password.');
+      }
+    } finally {
+      setIsLoading(false);
     }
-
-    // In demo environment, validate basic match or demo presets
-    setCurrentUser(found);
-    onLoginSuccess(found);
-  };
-
-  const fillDemoAccount = (role: 'USER' | 'ADMIN') => {
-    if (role === 'USER') {
-      setEmail('user@transitph.test');
-      setPassword('User123!');
-    } else {
-      setEmail('admin@transitph.test');
-      setPassword('Admin123!');
-    }
-    setError(null);
   };
 
   return (
@@ -62,7 +65,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           CALABARZON Multi-Modal Transit Navigation
         </p>
         <div className="inline-block mt-2 bg-emerald-50 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full border border-emerald-200 font-medium">
-          30% Midterm Implementation
+          Cloud-Powered Version
         </div>
       </div>
 
@@ -92,7 +95,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="user@transitph.test"
+                placeholder="user@example.com"
                 className="w-full pl-9 pr-3 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all text-slate-900"
               />
             </div>
@@ -117,37 +120,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
           <button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            disabled={isLoading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold py-2.5 px-4 rounded-xl text-sm transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            <span>Sign In</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <span>Signing In...</span>
+            ) : (
+              <>
+                <span>Sign In</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
-
-        {/* Quick Demo Fill Buttons */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2.5 text-center">
-            Quick Demo Fill (Testing)
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => fillDemoAccount('USER')}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-medium text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Fill Commuter</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemoAccount('ADMIN')}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2.5 text-xs font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
-              <span>Fill Admin</span>
-            </button>
-          </div>
-        </div>
 
         {/* Register prompt */}
         <div className="mt-5 text-center">

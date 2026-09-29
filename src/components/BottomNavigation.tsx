@@ -38,15 +38,19 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            <div className="relative">
-              <Icon className={`w-5 h-5 transition-transform ${isActive ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'}`} />
+            <div className={`relative flex items-center justify-center transition-all duration-200 ${
+              isActive
+                ? 'w-8 h-8 rounded-full bg-emerald-600 text-white scale-110 shadow-md'
+                : 'w-8 h-8 rounded-full text-slate-500'
+            }`}>
+              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.4]' : 'stroke-[1.8]'}`} />
               {Boolean(tab.badge && tab.badge > 0) && (
                 <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-xs">
                   {tab.badge}
                 </span>
               )}
             </div>
-            <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold' : 'font-normal'}`}>
+            <span className={`text-[10px] mt-0.5 tracking-tight ${isActive ? 'font-bold text-emerald-700' : 'font-normal text-slate-500'}`}>
               {tab.label}
             </span>
           </button>

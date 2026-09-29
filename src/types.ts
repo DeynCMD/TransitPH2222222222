@@ -1,7 +1,7 @@
 export type UserRole = 'USER' | 'ADMIN';
 
 export interface User {
-  id: number;
+  id: string;
   fullName: string;
   email: string;
   role: UserRole;
@@ -9,7 +9,7 @@ export interface User {
 }
 
 export interface Terminal {
-  id: number;
+  id: string;
   name: string;
   city: string;
   province: string;
@@ -21,7 +21,7 @@ export interface Terminal {
 export type TransportType = 'Jeepney' | 'Bus' | 'UV Express' | 'Modern Jeepney';
 
 export interface RouteStop {
-  id: number;
+  id: string;
   name: string;
   sequence: number;
 }
@@ -37,8 +37,8 @@ export interface TimelineStep {
 }
 
 export interface Route {
-  id: number;
-  terminalId: number;
+  id: string;
+  terminalId: string;
   name: string;
   origin: string;
   destination: string;
@@ -53,9 +53,9 @@ export interface Route {
 }
 
 export interface SavedRoute {
-  id: number;
-  userId: number;
-  routeId: number;
+  id: string;
+  userId: string;
+  routeId: string;
   route: Route;
   savedAt: string;
 }
@@ -63,7 +63,7 @@ export interface SavedRoute {
 export type PhraseCategory = 'Directions' | 'Transportation' | 'Fare' | 'Getting Off' | 'Courtesy';
 
 export interface CommuterPhrase {
-  id: number;
+  id: string;
   category: PhraseCategory;
   english: string;
   filipino: string;

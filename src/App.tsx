@@ -17,90 +17,107 @@ import { OfficialDeploymentModal } from './components/OfficialDeploymentModal';
 import { User, Route, Terminal, SavedRoute } from './types';
 import {
   getCurrentUser,
-  setCurrentUser,
+  signOut,
+} from './services/authService';
+import {
   getTerminals,
   getRoutes,
   getSavedRoutes,
-  getStoredUsers,
-} from './services/storage';
+} from './services/dbService';
 import { Wifi, BatteryMedium, SignalHigh } from 'lucide-react';
+import { supabase } from './services/supabaseClient';
 
 export default function App() {
   // Session & User State
-  const [currentUser, setUser] = useState<User | null>(() => {
-    const existing = getCurrentUser();
-    if (existing) return existing;
-    // Auto-login Maria Santos (Commuter Demo) by default for seamless preview
-    const users = getStoredUsers();
-    const defaultUser = users[0] || null;
-    if (defaultUser) setCurrentUser(defaultUser);
-    return defaultUser;
-  });
+  const [currentUser, setUser] = useState<User | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const user = await getCurrentUser();
+        setUser(user);
+      } catch (e) {
+        console.error('Auth init error:', e);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const user = await getCurrentUser();
+        setUser(user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
-  // Navigation State
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [isAdminConsoleOpen, setIsAdminConsoleOpen] = useState(false);
 
-  // Search Prefill across screens
   const [finderOrigin, setFinderOrigin] = useState('');
   const [finderDestination, setFinderDestination] = useState('');
 
-  // Modals & Details
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
   const [selectedTerminal, setSelectedTerminal] = useState<Terminal | null>(null);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
 
-  // Phone Frame View Toggle (Default to true for authentic Android experience)
   const [isMobileFrame, setIsMobileFrame] = useState(true);
 
-  // App Data State
-  const [terminals, setTerminals] = useState<Terminal[]>(() => getTerminals());
-  const [routes, setRoutes] = useState<Route[]>(() => getRoutes());
+  const [terminals, setTerminals] = useState<Terminal[]>([]);
+  const [routes, setRoutes] = useState<Route[]>([]);
   const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
 
-  // Refresh saved routes when user or route changes
-  const refreshSavedRoutes = () => {
-    if (currentUser) {
-      setSavedRoutes(getSavedRoutes(currentUser.id));
+  const refreshSavedRoutes = async () => {
+    if (currentUser && currentUser.id) {
+      try {
+        const data = await getSavedRoutes(currentUser.id);
+        setSavedRoutes(data);
+      } catch (e) {
+        console.error('Error fetching saved routes:', e);
+        setSavedRoutes([]);
+      }
     } else {
       setSavedRoutes([]);
     }
   };
 
-  const refreshAllData = () => {
-    setTerminals(getTerminals());
-    setRoutes(getRoutes());
-    refreshSavedRoutes();
+  const refreshAllData = async () => {
+    try {
+      const t = await getTerminals();
+      const r = await getRoutes();
+      setTerminals(t);
+      setRoutes(r);
+      await refreshSavedRoutes();
+    } catch (e) {
+      console.error('Error refreshing app data:', e);
+    }
   };
 
   useEffect(() => {
-    refreshSavedRoutes();
+    refreshAllData();
   }, [currentUser]);
 
-  // Handlers
   const handleLoginSuccess = (user: User) => {
     setUser(user);
     setActiveTab('home');
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    await signOut();
     setUser(null);
     setAuthView('login');
-  };
-
-  const handleSwitchUser = (email: string) => {
-    const users = getStoredUsers();
-    const target = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (target) {
-      setCurrentUser(target);
-      setUser(target);
-      setIsAdminConsoleOpen(false);
-      refreshSavedRoutes();
-    }
   };
 
   const handleQuickSearchFromHome = (origin: string, destination: string) => {
@@ -114,7 +131,14 @@ export default function App() {
     setActiveTab(tab);
   };
 
-  // If user is not logged in, render authentication flow
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-emerald-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-3">
@@ -135,7 +159,6 @@ export default function App() {
     );
   }
 
-  // Active Screen Content Renderer
   const renderScreenContent = () => {
     if (isAdminConsoleOpen && currentUser.role === 'ADMIN') {
       return (
@@ -196,7 +219,6 @@ export default function App() {
           <ProfileScreen
             currentUser={currentUser}
             onLogout={handleLogout}
-            onSwitchUser={handleSwitchUser}
             onOpenAdminDashboard={() => setIsAdminConsoleOpen(true)}
             onOpenAndroidGuide={() => setIsGuideModalOpen(true)}
           />
@@ -208,7 +230,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col antialiased text-slate-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Top Navbar */}
       <Navbar
         currentUser={currentUser}
         isMobileFrame={isMobileFrame}
@@ -221,15 +242,11 @@ export default function App() {
         }}
       />
 
-      {/* Main Container Area */}
       <main className="flex-1 flex items-center justify-center p-2 sm:p-4 md:p-6">
         {isMobileFrame ? (
-          /* Android Phone Simulation Frame */
           <div className="w-full max-w-[430px] h-[860px] max-h-[calc(100vh-80px)] bg-slate-900 rounded-[44px] p-2.5 shadow-2xl ring-1 ring-slate-800 flex flex-col relative transition-all">
-            {/* Phone Bezel Top - Camera & Sensor Notch */}
             <div className="h-6 w-full flex items-center justify-between px-6 text-white text-[11px] font-medium shrink-0 select-none">
               <span>9:41</span>
-              {/* Dynamic Island / Speaker Pill */}
               <div className="w-20 h-4 bg-black rounded-full mx-auto -mt-1 flex items-center justify-center">
                 <div className="w-2.5 h-2.5 rounded-full bg-slate-900/90 ml-auto mr-1.5" />
               </div>
@@ -240,14 +257,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* Inner Android Screen Area */}
             <div className="flex-1 bg-slate-50 rounded-[34px] overflow-hidden flex flex-col shadow-inner relative">
-              {/* Scrollable Screen Content */}
               <div className="flex-1 overflow-y-auto px-4 pt-3.5 pb-2">
                 {renderScreenContent()}
               </div>
 
-              {/* Bottom Android Navigation */}
               <BottomNavigation
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
@@ -255,13 +269,11 @@ export default function App() {
               />
             </div>
 
-            {/* Bottom Home Indicator Bar */}
             <div className="h-4 flex items-center justify-center shrink-0">
               <div className="w-32 h-1 bg-slate-600 rounded-full" />
             </div>
           </div>
         ) : (
-          /* Fullscreen Responsive Mode */
           <div className="w-full max-w-4xl bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[750px]">
             <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
               {renderScreenContent()}
@@ -275,7 +287,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Route Details Modal */}
       <RouteDetailsModal
         route={selectedRoute}
         currentUser={currentUser}
@@ -283,7 +294,6 @@ export default function App() {
         onRouteSavedChange={refreshSavedRoutes}
       />
 
-      {/* Terminal Details Modal */}
       <TerminalDetailsModal
         terminal={selectedTerminal}
         routes={routes}
@@ -294,13 +304,11 @@ export default function App() {
         }}
       />
 
-      {/* Android Project Source Code Guide Modal */}
       <AndroidProjectGuideModal
         isOpen={isGuideModalOpen}
         onClose={() => setIsGuideModalOpen(false)}
       />
 
-      {/* Official Deployment & Regulatory Hub Modal */}
       <OfficialDeploymentModal
         isOpen={isDeploymentModalOpen}
         onClose={() => setIsDeploymentModalOpen(false)}
